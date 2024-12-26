@@ -4,4 +4,7 @@ Zadatak: Chat aplikacija sa odredjenim funkcionalnostima
 
 Commit :
 * Korisnik salje privatne poruke drugim korisnicima (Server vidi sve)
-    * Korisnik unese Ime korisnika kome zeli da posalje privatnu poruku + : + sadrzaj poruke  'User: sadrzaj'
+    * Korisnik unese Ime korisnika kome zeli da posalje privatnu poruku + : + sadrzaj poruke  (user: poruka)
+    * Ukoliko navedeni korisnik ne postoji, posiljalac ce biti obavesten
+* Multicast - korisnik istu poruku salje selektovanoj grupi korisnika (Server vidi sve)
+    * Korisnik unese vise primalaca odvojenih zarezom (user1, user2: poruka)
