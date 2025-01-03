@@ -2,6 +2,7 @@ package rs.raf.pds.v4.z5;
 
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,6 +54,22 @@ public class ChatServer implements Runnable {
 
 	private void registerListener() {
 		server.addListener(new Listener() {
+			@Override
+	        public void connected(Connection connection) {
+	            // Slanje liste soba novom korisniku
+	            if (!rooms.isEmpty()) {
+	                StringBuilder roomList = new StringBuilder("Available rooms: ");
+	                for (String roomName : rooms.keySet()) {
+	                    roomList.append(roomName).append(", ");
+	                }
+	                // Uklanja poslednji zarez i razmak
+	                roomList.setLength(roomList.length() - 2);
+	                connection.sendTCP(new InfoMessage(roomList.toString()));
+	            } else {
+	                connection.sendTCP(new InfoMessage("No rooms available at the moment."));
+	            }
+	        }
+			
 			public void received(Connection connection, Object object) {
 				if (object instanceof Login) {
 					Login login = (Login) object;
@@ -139,12 +156,20 @@ public class ChatServer implements Runnable {
 				    usersInRoom.add(joinRoom.getUserName());
 				    room.addUser(joinRoom.getUserName(), connection);
 
+				    // Slanje poslednjih 10 poruka iz sobe korisniku
+				    List<String> messageHistory = room.getMessageHistory();
+				    for (String message : messageHistory) {
+				        connection.sendTCP(new ChatMessage("Room " + joinRoom.getRoomName(), message));
+				    }
+
+				    
 				    room.broadcast(joinRoom.getUserName() + " has joined the room.", null);
 
 				    System.out.println("User " + joinRoom.getUserName() + " has joined the room " + joinRoom.getRoomName());
 				    System.out.println("Trenutni clanovi sobe " + joinRoom.getRoomName() + ": " + usersInRoom);
 
-				    connection.sendTCP(new InfoMessage("You have joined the room " + joinRoom.getRoomName() + "."));
+				    connection.sendTCP(new InfoMessage("You have joined the room " + joinRoom.getRoomName() + ". WELCOME!"));
+			
 				}
 
 				
@@ -166,6 +191,10 @@ public class ChatServer implements Runnable {
 				        connection.sendTCP(new InfoMessage("You are not a member of room " + roomMessage.getRoomName() + "."));
 				        return;
 				    }
+				    
+				    // Dodajemo poruku u istoriju sobe
+				    room.addMessage(roomMessage.getUser() + ": " + roomMessage.getTxt());
+
 
 				    // Pošalji poruku svim članovima sobe
 				    room.broadcast(roomMessage.getUser() + ": " + roomMessage.getTxt(), connection);
@@ -300,17 +329,6 @@ public class ChatServer implements Runnable {
 			}
 		}
 	}
-	/*
-	private void createRoom(String roomName, Connection exception) {
-		if (chatRooms.containsKey(roomName)) {
-			exception.sendTCP(new InfoMessage("Room already exists."));
-			return;
-		}
-		chatRooms.put(roomName, ConcurrentHashMap.newKeySet());
-	    chatRooms.get(roomName).add(connectionUserMap.get(exception));
-	    exception.sendTCP(new InfoMessage("Room " + roomName + " created successfully."));
-	}*/
-
 	private void showTextToAll(String txt, Connection exception) {
 		System.out.println(txt);
 		for (Connection conn : userConnectionMap.values()) {

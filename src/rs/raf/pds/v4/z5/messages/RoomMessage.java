@@ -9,6 +9,12 @@ public class RoomMessage {
 		
 	}
 	
+	public RoomMessage(String roomName, String txt) {
+		this.roomName = roomName;
+		this.txt = txt;
+	}
+	
+	
 	public RoomMessage(String user, String roomName, String txt) {
 		this.user = user;
 		this.roomName = roomName;

@@ -13,3 +13,5 @@ Commit :
     * JOIN ROOM nazivSobe
     * INVITE USER nazivSobe imeKorisnikaKojiSePoziva
     * ROOM MSG nazivSobe poruka
+    * Prikaz liste soba korisniku koji se naknadno konektovao
+    * Prikaz poslednjih 10 poruka iz sobe korisniku koji se naknadno prikljucio toj sobi

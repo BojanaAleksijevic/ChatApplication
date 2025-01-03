@@ -163,7 +163,8 @@ public class ChatClient implements Runnable{
 	                        String message = parts[3];
 	                        client.sendTCP(new RoomMessage(userName, roomName, message));
 	                    }
-	                } else if (userInput.startsWith("INVITE USER ")) {
+	                } 
+	                else if (userInput.startsWith("INVITE USER ")) {
 	                    String[] parts = userInput.split(" ", 4);
 	                    if (parts.length < 4) {
 	                        System.out.println("Usage: INVITE USER <roomName> <userName>");
