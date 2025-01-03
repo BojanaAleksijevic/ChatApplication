@@ -9,7 +9,7 @@ Commit :
 * Multicast - korisnik istu poruku salje selektovanoj grupi korisnika (Server vidi sve)
     * Korisnik unese vise primalaca odvojenih zarezom (user1, user2: poruka)
 * Chat soba - mogucnost kreiranje sobe, pozivanja drugih korisnika, ulaska u sobu, slanja poruka
-    * CREATE ROOM <nazivSobe>
-    * JOIN ROOM <nazivSobe>
-    * INVITE USER <nazivSobe> <imeKorisnikaKojiSePoziva>
-    * ROOM MSG <nazivSobe> <poruka>
+    * CREATE ROOM nazivSobe
+    * JOIN ROOM nazivSobe
+    * INVITE USER nazivSobe imeKorisnikaKojiSePoziva
+    * ROOM MSG nazivSobe poruka
