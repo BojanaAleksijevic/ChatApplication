@@ -9,10 +9,14 @@ import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 
 import rs.raf.pds.v4.z5.messages.ChatMessage;
+import rs.raf.pds.v4.z5.messages.CreateRoom;
 import rs.raf.pds.v4.z5.messages.InfoMessage;
+import rs.raf.pds.v4.z5.messages.InviteUser;
+import rs.raf.pds.v4.z5.messages.JoinRoom;
 import rs.raf.pds.v4.z5.messages.KryoUtil;
 import rs.raf.pds.v4.z5.messages.ListUsers;
 import rs.raf.pds.v4.z5.messages.Login;
+import rs.raf.pds.v4.z5.messages.RoomMessage;
 import rs.raf.pds.v4.z5.messages.WhoRequest;
 
 public class ChatClient implements Runnable{
@@ -71,6 +75,17 @@ public class ChatClient implements Runnable{
 					showMessage(message.getUser()+"r:"+message.getTxt());
 					return;
 				}*/
+				
+				if (object instanceof ChatMessage) {
+				    ChatMessage chatMessage = (ChatMessage) object;
+				    if (chatMessage.getTxt().startsWith("(Room")) {
+				        System.out.println(chatMessage.getTxt());
+				    } else {
+				        showChatMessage(chatMessage);
+				    }
+				    return;
+				}
+
 			}
 			
 			public void disconnected(Connection connection) {
@@ -116,7 +131,7 @@ public class ChatClient implements Runnable{
 		
 		try (
 				BufferedReader stdIn = new BufferedReader(
-	                    new InputStreamReader(System.in))	// Za Ä�itanje sa standardnog ulaza - tastature!
+	                    new InputStreamReader(System.in))	// Za citanje sa standardnog ulaza - tastature!
 	        ) {
 					            
 				String userInput;
@@ -127,10 +142,40 @@ public class ChatClient implements Runnable{
 	            	if (userInput == null || "BYE".equalsIgnoreCase(userInput)) // userInput - tekst koji je unet sa tastature!
 	            	{
 	            		running = false;
-	            	}
-	            	else if ("WHO".equalsIgnoreCase(userInput)){
+	            		
+	            	} else if ("WHO".equalsIgnoreCase(userInput)){
 	            		client.sendTCP(new WhoRequest());
-	            	} else if (userInput.contains(":")) {
+	            	} 
+	            	// sobe
+	            	else if (userInput.startsWith("CREATE ROOM ")) {
+	            	    // Logika za kreiranje sobe
+	            	    String roomName = userInput.substring(12).trim();
+	                    client.sendTCP(new CreateRoom(roomName, userName));
+	                } else if (userInput.startsWith("JOIN ROOM ")) {
+	                    String roomName = userInput.substring(10).trim();
+	                    client.sendTCP(new JoinRoom(roomName, userName));
+	                } else if (userInput.startsWith("ROOM MSG ")) {
+	                    String[] parts = userInput.split(" ", 4);
+	                    if (parts.length < 4) {
+	                        System.out.println("Usage: ROOM MSG <roomName> <message>");
+	                    } else {
+	                        String roomName = parts[2];
+	                        String message = parts[3];
+	                        client.sendTCP(new RoomMessage(userName, roomName, message));
+	                    }
+	                } else if (userInput.startsWith("INVITE USER ")) {
+	                    String[] parts = userInput.split(" ", 4);
+	                    if (parts.length < 4) {
+	                        System.out.println("Usage: INVITE USER <roomName> <userName>");
+	                    } else {
+	                        String roomName = parts[2];
+	                        String invitedUser = parts[3];
+	                        client.sendTCP(new InviteUser(roomName, invitedUser));
+	                    }
+	                }
+
+	            	
+	            	else if (userInput.contains(":")) {
 	            	    // Ovo je privatna poruka
 	            	    client.sendTCP(new ChatMessage(userName, userInput));
 	            	} else {

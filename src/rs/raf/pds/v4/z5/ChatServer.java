@@ -1,19 +1,31 @@
 package rs.raf.pds.v4.z5;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+
 
 import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
 
 import rs.raf.pds.v4.z5.messages.ChatMessage;
+import rs.raf.pds.v4.z5.messages.CreateRoom;
 import rs.raf.pds.v4.z5.messages.InfoMessage;
+import rs.raf.pds.v4.z5.messages.InviteUser;
+import rs.raf.pds.v4.z5.messages.JoinRoom;
 import rs.raf.pds.v4.z5.messages.KryoUtil;
 import rs.raf.pds.v4.z5.messages.ListUsers;
 import rs.raf.pds.v4.z5.messages.Login;
+import rs.raf.pds.v4.z5.messages.RoomMessage;
 import rs.raf.pds.v4.z5.messages.WhoRequest;
+import rs.raf.pds.v4.z5.model.Room;
+
+
+
 
 public class ChatServer implements Runnable {
 
@@ -25,6 +37,12 @@ public class ChatServer implements Runnable {
 	ConcurrentMap<String, Connection> userConnectionMap = new ConcurrentHashMap<String, Connection>();
 	ConcurrentMap<Connection, String> connectionUserMap = new ConcurrentHashMap<Connection, String>();
 
+	// za sobe
+	private final ConcurrentMap<String, Room> rooms = new ConcurrentHashMap<>(); // Sobe
+	ConcurrentMap<String, Set<String>> roomUsers = new ConcurrentHashMap<>(); // Koji korisnici su u kojoj sobi
+
+	
+	
 	public ChatServer(int portNumber) {
 		this.server = new Server();
 
@@ -61,6 +79,153 @@ public class ChatServer implements Runnable {
 					connection.sendTCP(listUsers);
 					return;
 				}
+				
+				if (object instanceof CreateRoom) {
+				    CreateRoom createRoom = (CreateRoom) object;
+
+				    // Debug log za ime sobe i korisnika
+				    System.out.println("Debug: Room Name = " + createRoom.getRoomName());
+				    System.out.println("Debug: User Name = " + createRoom.getUserName());
+
+				    // Provera da li soba već postoji
+				    if (rooms.containsKey(createRoom.getRoomName())) {
+				        connection.sendTCP(new InfoMessage("Room " + createRoom.getRoomName() + " already exists."));
+				        return;
+				    }
+
+				    // Provera da ime sobe i korisnika nisu isto
+				    if (createRoom.getRoomName().equals(createRoom.getUserName())) {
+				        connection.sendTCP(new InfoMessage("Error: Room name and user name cannot be the same."));
+				        return;
+				    }
+
+
+				    Room room = new Room(createRoom.getRoomName());
+				    rooms.put(createRoom.getRoomName(), room);
+				    System.out.println("Debug: Room created: " + room.getRoomName());
+
+				    // Dodavanje kreatora sobe kao člana sobe
+				    room.addUser(createRoom.getUserName(), connection); // Dodavanje korisnika direktno u objekat Room
+				    roomUsers.computeIfAbsent(createRoom.getRoomName(), k -> new HashSet<>()).add(createRoom.getUserName());
+				    userConnectionMap.put(createRoom.getUserName(), connection);
+				    System.out.println("Debug: User " + createRoom.getUserName() + " added to room " + createRoom.getRoomName());
+
+				    // Prikaz trenutnih članova sobe
+				    Set<String> currentMembers = roomUsers.get(createRoom.getRoomName());
+				    System.out.println("Trenutni clanovi sobe " + createRoom.getRoomName() + ": " + currentMembers);
+
+				    connection.sendTCP(new InfoMessage("Room " + createRoom.getRoomName() + " created, and you joined it."));
+				}
+
+				
+				if (object instanceof JoinRoom) {
+				    JoinRoom joinRoom = (JoinRoom) object;
+
+				    // Provera da li soba postoji
+				    Room room = rooms.get(joinRoom.getRoomName());
+				    if (room == null) {
+				        connection.sendTCP(new InfoMessage("Room " + joinRoom.getRoomName() + " not found."));
+				        return;
+				    }
+
+				    // Provera da li je korisnik već član sobe
+				    Set<String> usersInRoom = roomUsers.computeIfAbsent(joinRoom.getRoomName(), k -> new HashSet<>());
+				    if (usersInRoom.contains(joinRoom.getUserName())) {
+				        connection.sendTCP(new InfoMessage("You are already a member of room " + joinRoom.getRoomName() + "."));
+				        return;
+				    }
+
+				    // Dodavanje korisnika u sobu
+				    usersInRoom.add(joinRoom.getUserName());
+				    room.addUser(joinRoom.getUserName(), connection);
+
+				    room.broadcast(joinRoom.getUserName() + " has joined the room.", null);
+
+				    System.out.println("User " + joinRoom.getUserName() + " has joined the room " + joinRoom.getRoomName());
+				    System.out.println("Trenutni clanovi sobe " + joinRoom.getRoomName() + ": " + usersInRoom);
+
+				    connection.sendTCP(new InfoMessage("You have joined the room " + joinRoom.getRoomName() + "."));
+				}
+
+				
+				if (object instanceof RoomMessage) {
+				    RoomMessage roomMessage = (RoomMessage) object;
+				    Room room = rooms.get(roomMessage.getRoomName());
+
+				    System.out.println("Debug: Room Name = " + roomMessage.getRoomName());
+				    System.out.println("Debug: User Name = " + roomMessage.getUser());
+
+				    if (room == null) {
+				        connection.sendTCP(new InfoMessage("Room " + roomMessage.getRoomName() + " does not exist."));
+				        return;
+				    }
+
+				    // Proveri da li je korisnik član sobe
+				    Set<String> usersInRoom = roomUsers.get(roomMessage.getRoomName());
+				    if (usersInRoom == null || !usersInRoom.contains(roomMessage.getUser())) {
+				        connection.sendTCP(new InfoMessage("You are not a member of room " + roomMessage.getRoomName() + "."));
+				        return;
+				    }
+
+				    // Pošalji poruku svim članovima sobe
+				    room.broadcast(roomMessage.getUser() + ": " + roomMessage.getTxt(), connection);
+				    
+				    System.out.println("Debug: RoomMessage received. Room: " + roomMessage.getRoomName() + ", User: " + roomMessage.getUser() + ", Text: " + roomMessage.getTxt());
+				}
+
+
+				
+				if (object instanceof InviteUser) {
+				    InviteUser inviteUser = (InviteUser) object;
+
+				    // Proveri da li soba postoji
+				    Room room = rooms.get(inviteUser.getRoomName());
+				    if (room != null) {
+				        // Ispis trenutnih članova sobe
+				        Set<String> usersInRoom = roomUsers.getOrDefault(inviteUser.getRoomName(), new HashSet<>());
+				        System.out.println("Trenutni clanovi sobe " + inviteUser.getRoomName() + ": " + usersInRoom);
+
+				        // Pronađi korisničko ime pozivaoca
+				        String invitingUser = null;
+				        for (Entry<String, Connection> entry : userConnectionMap.entrySet()) {
+				            if (entry.getValue().equals(connection)) {
+				                invitingUser = entry.getKey();
+				                break;
+				            }
+				        }
+
+				        // Ako pozivalac nije pronađen
+				        if (invitingUser == null) {
+				            connection.sendTCP(new InfoMessage("Error: Could not determine the inviting user."));
+				            return;
+				        }
+
+				        // Proveri da li je pozivalac član sobe
+				        if (!usersInRoom.contains(invitingUser)) {
+				            connection.sendTCP(new InfoMessage("You must be a member of room " + inviteUser.getRoomName() + " to invite other users."));
+				            return;
+				        }
+
+				        // Proveri da li je korisnik već u sobi
+				        if (usersInRoom.contains(inviteUser.getInvitedUser())) {
+				            connection.sendTCP(new InfoMessage("User " + inviteUser.getInvitedUser() + " is already a member of room " + inviteUser.getRoomName() + "."));
+				        } else {
+				            // Pošalji obaveštenje pozvanom korisniku
+				            Connection invitedConnection = userConnectionMap.get(inviteUser.getInvitedUser());
+				            if (invitedConnection != null) {
+				                invitedConnection.sendTCP(new InfoMessage("You have been invited to room " + inviteUser.getRoomName() + "."));
+				                connection.sendTCP(new InfoMessage("User " + inviteUser.getInvitedUser() + " invited to room " + inviteUser.getRoomName()));
+				            } else {
+				                connection.sendTCP(new InfoMessage("User " + inviteUser.getInvitedUser() + " is not online."));
+				            }
+				        }
+				    } else {
+				        connection.sendTCP(new InfoMessage("Room " + inviteUser.getRoomName() + " does not exist."));
+				    }
+				}
+
+
+
 			}
 
 			public void disconnected(Connection connection) {
@@ -135,6 +300,16 @@ public class ChatServer implements Runnable {
 			}
 		}
 	}
+	/*
+	private void createRoom(String roomName, Connection exception) {
+		if (chatRooms.containsKey(roomName)) {
+			exception.sendTCP(new InfoMessage("Room already exists."));
+			return;
+		}
+		chatRooms.put(roomName, ConcurrentHashMap.newKeySet());
+	    chatRooms.get(roomName).add(connectionUserMap.get(exception));
+	    exception.sendTCP(new InfoMessage("Room " + roomName + " created successfully."));
+	}*/
 
 	private void showTextToAll(String txt, Connection exception) {
 		System.out.println(txt);
