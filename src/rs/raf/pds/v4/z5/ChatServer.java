@@ -252,6 +252,32 @@ public class ChatServer implements Runnable {
 				        connection.sendTCP(new InfoMessage("Room " + inviteUser.getRoomName() + " does not exist."));
 				    }
 				}
+				
+				
+				
+				if (object instanceof String && ((String) object).startsWith("/getAllMessages")) {
+				    String roomName = ((String) object).substring("/getAllMessages ".length()).trim();
+				    Room room = rooms.get(roomName);
+
+				    //System.out.println("Debug: Received /getAllMessages for room " + roomName);
+
+				    if (room == null) {
+				        System.out.println("Debug: Room " + roomName + " not found.");
+				        connection.sendTCP("Room " + roomName + " not found.");
+				        return;
+				    }
+
+				    List<String> allMessages = room.getAllMessages();
+				    if (allMessages.isEmpty()) {
+				        connection.sendTCP("Room " + roomName + " has no messages.");
+				    } else {
+				        for (String msg : allMessages) {
+				            connection.sendTCP(new ChatMessage("Room " + roomName, msg));
+				        }
+				        System.out.println("Debug: Sent all messages for room " + roomName);
+				    }
+				}
+
 
 
 

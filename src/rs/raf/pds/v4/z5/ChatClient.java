@@ -85,6 +85,12 @@ public class ChatClient implements Runnable{
 				    }
 				    return;
 				}
+				
+				 if (object instanceof String) {
+					 System.out.println("Server: " + object);
+					 return;
+				 }
+				
 
 			}
 			
@@ -174,6 +180,18 @@ public class ChatClient implements Runnable{
 	                        client.sendTCP(new InviteUser(roomName, invitedUser));
 	                    }
 	                }
+	                else if (userInput.startsWith("/getAllMessages")) {
+	                    String[] parts = userInput.split(" ", 2); // Delimo unos na komandu i ime sobe
+	                    if (parts.length < 2) {
+	                        System.out.println("Usage: /getAllMessages <roomName>");
+	                    } else {
+	                        String roomName = parts[1].trim();
+	                        System.out.println("Debug: Sending /getAllMessages " + roomName);
+	                        client.sendTCP("/getAllMessages " + roomName); // Šaljemo serveru zahtev
+	                    }
+	                }
+
+
 
 	            	
 	            	else if (userInput.contains(":")) {

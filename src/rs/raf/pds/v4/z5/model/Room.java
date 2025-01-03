@@ -14,6 +14,7 @@ import rs.raf.pds.v4.z5.messages.ChatMessage;
 public class Room {
 	private String roomName;
 	private final Map<String, Connection> users; // Mapiranje korisničkog imena na konekciju
+	private final List<String> allMessages = new ArrayList<>();
 	private final LinkedList<String> messageHistory; // Čuva poslednjih 10 poruka
 
     public Room() {
@@ -69,16 +70,24 @@ public class Room {
     }
 	
 	public void addMessage(String message) {
-        if (messageHistory.size() >= 10) {
-            messageHistory.removeFirst(); // Uklanja najstariju poruku
-        }
-        messageHistory.addLast(message);
+		allMessages.add(message);
+		
+		// poslednjih 10 poruka
+	    messageHistory.add(message);
+	    if (messageHistory.size() > 10) {
+	        messageHistory.remove(0); // Ukloni najstariju poruku
+	    }
     }
     
 
 	public List<String> getMessageHistory() {
         return List.copyOf(messageHistory);
     }
+	
+	public List<String> getAllMessages() {
+	    return List.copyOf(allMessages);
+	}
+
     
     
 	public void broadcast(String message, Connection exception) {
