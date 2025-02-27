@@ -6,13 +6,12 @@ public class ListUsers {
 	protected ListUsers() {
 		
 	}
+	
 	public ListUsers(String[] users) {
 		this.users = users;
 	}
-
+	
 	public String[] getUsers() {
 		return users;
 	}
-	
-	
 }

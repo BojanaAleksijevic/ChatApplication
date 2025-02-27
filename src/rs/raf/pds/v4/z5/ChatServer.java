@@ -8,7 +8,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-
 import com.esotericsoftware.kryonet.Connection;
 import com.esotericsoftware.kryonet.Listener;
 import com.esotericsoftware.kryonet.Server;
@@ -21,6 +20,7 @@ import rs.raf.pds.v4.z5.messages.JoinRoom;
 import rs.raf.pds.v4.z5.messages.KryoUtil;
 import rs.raf.pds.v4.z5.messages.ListUsers;
 import rs.raf.pds.v4.z5.messages.Login;
+import rs.raf.pds.v4.z5.messages.ReplyMessage;
 import rs.raf.pds.v4.z5.messages.RoomMessage;
 import rs.raf.pds.v4.z5.messages.WhoRequest;
 import rs.raf.pds.v4.z5.model.Room;
@@ -42,6 +42,11 @@ public class ChatServer implements Runnable {
 	private final ConcurrentMap<String, Room> rooms = new ConcurrentHashMap<>(); // Sobe
 	ConcurrentMap<String, Set<String>> roomUsers = new ConcurrentHashMap<>(); // Koji korisnici su u kojoj sobi
 
+	private int nextMessageId = 1;
+
+	public synchronized int generateMessageId() {
+	    return nextMessageId++;
+	}
 	
 	
 	public ChatServer(int portNumber) {
@@ -86,8 +91,10 @@ public class ChatServer implements Runnable {
 
 				if (object instanceof ChatMessage) {
 					ChatMessage chatMessage = (ChatMessage) object;
+					
+				    
 					System.out.println(chatMessage.getUser() + ": " + chatMessage.getTxt());
-					broadcastChatMessage(chatMessage, connection);
+			        broadcastChatMessage(chatMessage, connection);
 					return;
 				}
 
@@ -119,7 +126,7 @@ public class ChatServer implements Runnable {
 
 				    Room room = new Room(createRoom.getRoomName());
 				    rooms.put(createRoom.getRoomName(), room);
-				    System.out.println("Debug: Room created: " + room.getRoomName());
+				   // System.out.println("Debug: Room created: " + room.getRoomName());
 
 				    // Dodavanje kreatora sobe kao člana sobe
 				    room.addUser(createRoom.getUserName(), connection); // Dodavanje korisnika direktno u objekat Room
@@ -156,18 +163,34 @@ public class ChatServer implements Runnable {
 				    usersInRoom.add(joinRoom.getUserName());
 				    room.addUser(joinRoom.getUserName(), connection);
 
-				    // Slanje poslednjih 10 poruka iz sobe korisniku
-				    List<String> messageHistory = room.getMessageHistory();
-				    for (String message : messageHistory) {
-				        connection.sendTCP(new ChatMessage("Room " + joinRoom.getRoomName(), message));
-				    }
-
-				    
-				    room.broadcast(joinRoom.getUserName() + " has joined the room.", null);
-
 				    System.out.println("User " + joinRoom.getUserName() + " has joined the room " + joinRoom.getRoomName());
 				    System.out.println("Trenutni clanovi sobe " + joinRoom.getRoomName() + ": " + usersInRoom);
 
+				    
+				    // Slanje poslednjih 10 poruka iz sobe korisniku
+				    List<RoomMessage> messageHistory = room.getMessageHistory();
+
+				    
+				 // provera pre slanja poruka (obrisi naredne 4 linije)
+				   /* System.out.println("Poruke u istoriji sobe " + joinRoom.getRoomName() + ":");
+				    for (RoomMessage message : messageHistory) {
+				        System.out.println("[" + message.getId() + "] " + message.getUser() + ": " + message.getTxt());
+				    }*/
+
+			
+				    
+				    for (RoomMessage message : messageHistory) {
+				    	System.out.println("Saljem korisniku poruku: " + "[" + message.getId() + "] " + message.getUser() + ": " + message.getTxt());
+				    					        
+				    	connection.sendTCP(message);
+
+				    }
+
+				    
+				    room.broadcast(new RoomMessage("Server", "Room " + joinRoom.getRoomName(), joinRoom.getUserName() + " has joined the room."), null);
+
+				    
+		
 				    connection.sendTCP(new InfoMessage("You have joined the room " + joinRoom.getRoomName() + ". WELCOME!"));
 			
 				}
@@ -175,10 +198,15 @@ public class ChatServer implements Runnable {
 				
 				if (object instanceof RoomMessage) {
 				    RoomMessage roomMessage = (RoomMessage) object;
-				    Room room = rooms.get(roomMessage.getRoomName());
 
-				    System.out.println("Debug: Room Name = " + roomMessage.getRoomName());
-				    System.out.println("Debug: User Name = " + roomMessage.getUser());
+				    // Ako soba ne postoji, prekidamo obradu
+				    if (roomMessage.getRoomName() == null) {
+				        System.err.println("Error: Room name is null in RoomMessage.");
+				        connection.sendTCP(new InfoMessage("Invalid room name."));
+				        return;
+				    }
+
+				    Room room = rooms.get(roomMessage.getRoomName());
 
 				    if (room == null) {
 				        connection.sendTCP(new InfoMessage("Room " + roomMessage.getRoomName() + " does not exist."));
@@ -191,16 +219,74 @@ public class ChatServer implements Runnable {
 				        connection.sendTCP(new InfoMessage("You are not a member of room " + roomMessage.getRoomName() + "."));
 				        return;
 				    }
-				    
+
+				    // Generišemo ID samo za poruke u sobama
+				    int id = generateMessageId();
+				    roomMessage.setId(id);
+				    //System.out.println(">>> Generisan ID: " + id + " za poruku: " + roomMessage.getTxt());
+
 				    // Dodajemo poruku u istoriju sobe
-				    room.addMessage(roomMessage.getUser() + ": " + roomMessage.getTxt());
-
-
-				    // Pošalji poruku svim članovima sobe
-				    room.broadcast(roomMessage.getUser() + ": " + roomMessage.getTxt(), connection);
+				    room.addMessage(new RoomMessage(
+				        roomMessage.getUser(), 
+				        roomMessage.getRoomName(), 
+				        roomMessage.getTxt(), 
+				        true, 
+				        roomMessage.getId()
+				    ));
 				    
-				    System.out.println("Debug: RoomMessage received. Room: " + roomMessage.getRoomName() + ", User: " + roomMessage.getUser() + ", Text: " + roomMessage.getTxt());
+				    // Provera da li se poruka dodala
+				    //System.out.println("Message sent to room " + roomMessage.getRoomName() + ": " + roomMessage.getTxt());
+
+				    // salje se poruka i posiljaocu
+				    connection.sendTCP(roomMessage);
+				    
+				    room.broadcast(roomMessage, connection);
 				}
+
+
+				if (object instanceof ReplyMessage) {
+				    ReplyMessage replyMessage = (ReplyMessage) object;
+
+				    Room room = rooms.get(replyMessage.getRoomName());
+
+				    if (room == null) {
+				        connection.sendTCP(new InfoMessage("Room " + replyMessage.getRoomName() + " does not exist."));
+				        return;
+				    }
+
+				    // Proveri da li korisnik može da odgovori
+				    if (!roomUsers.get(replyMessage.getRoomName()).contains(replyMessage.getUser())) {
+				        connection.sendTCP(new InfoMessage("You are not a member of this room."));
+				        return;
+				    }
+
+				    // Proveri da li poruka na koju se odgovara postoji
+				    RoomMessage originalMessage = room.getMessageById(replyMessage.getReplyToMessageId());
+
+				    if (originalMessage == null) {
+				        System.out.println("Reply to unknown message ID: " + replyMessage.getReplyToMessageId());
+				        replyMessage.setReplyToText("Unknown message");
+				    } else {
+				        replyMessage.setReplyToText(originalMessage.getTxt());
+				    }
+
+				    // Generišemo ID za odgovor
+				    int replyId = generateMessageId();
+				    replyMessage.setId(replyId);
+
+				    // Dodaj odgovor u istoriju sobe
+				    room.addMessage(replyMessage);
+				    
+				    
+				    System.out.println("Reply to [" + replyMessage.getReplyToMessageId() + "] '" + replyMessage.getReplyToText() + 
+				        "' by " + replyMessage.getUser() + ": [" + replyMessage.getId() + "] " + replyMessage.getTxt());
+
+				 // Šalje se poruka i posiljaocu
+				    connection.sendTCP(replyMessage); 
+				    
+				    room.broadcast(replyMessage, connection);
+				}
+
 
 
 				
@@ -267,20 +353,20 @@ public class ChatServer implements Runnable {
 				        return;
 				    }
 
-				    List<String> allMessages = room.getAllMessages();
+				    List<RoomMessage> allMessages = room.getAllMessages();
 				    if (allMessages.isEmpty()) {
 				        connection.sendTCP("Room " + roomName + " has no messages.");
 				    } else {
-				        for (String msg : allMessages) {
-				            connection.sendTCP(new ChatMessage("Room " + roomName, msg));
+				    	for (RoomMessage msg : allMessages) {
+				            connection.sendTCP(new ChatMessage("Room " + roomName, 
+				                "[" + msg.getId() + "] " + msg.getUser() + ": " + msg.getTxt())); 
 				        }
+
 				        System.out.println("Debug: Sent all messages for room " + roomName);
 				    }
 				}
-
-
-
-
+				
+		
 			}
 
 			public void disconnected(Connection connection) {

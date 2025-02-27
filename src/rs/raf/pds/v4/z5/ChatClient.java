@@ -3,6 +3,8 @@ package rs.raf.pds.v4.z5;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.esotericsoftware.kryonet.Client;
 import com.esotericsoftware.kryonet.Connection;
@@ -33,6 +35,8 @@ public class ChatClient implements Runnable{
 	final int portNumber;
 	final String userName;
 	
+	private Map<Integer, RoomMessage> messageHistory = new HashMap<>();
+	
 	
 	public ChatClient(String hostName, int portNumber, String userName) {
 		this.client = new Client(DEFAULT_CLIENT_WRITE_BUFFER_SIZE, DEFAULT_CLIENT_READ_BUFFER_SIZE);
@@ -43,6 +47,18 @@ public class ChatClient implements Runnable{
 		KryoUtil.registerKryoClasses(client.getKryo());
 		registerListener();
 	}
+
+
+
+	public String getMessageTextById(int messageId) {
+	    RoomMessage message = messageHistory.get(messageId);
+	    if (message != null) {
+	        return message.getTxt();
+	    }
+	    return "Unknown message";
+	}
+
+
 	
 	private void registerListener() {
 		client.addListener(new Listener() {
@@ -90,7 +106,30 @@ public class ChatClient implements Runnable{
 					 System.out.println("Server: " + object);
 					 return;
 				 }
-				
+				 
+				 if (object instanceof RoomMessage) {
+					 RoomMessage roomMessage = (RoomMessage) object;
+
+					 //System.out.println(">>> Klijent primio poruku ID=" + roomMessage.getId() + " Tekst='" + roomMessage.getTxt() + "'");
+
+					    
+					 // addMessageToHistory(roomMessage);
+					 messageHistory.put(roomMessage.getId(), roomMessage);
+					    
+					    
+					 String replyToText = (roomMessage.getReplyToMessageId() != 0) ? 
+					        getMessageTextById(roomMessage.getReplyToMessageId()) : "";
+
+					 // Prikaz odgovora
+					 if (roomMessage.getReplyToMessageId() != 0) {
+						 System.out.println("Reply to [" + roomMessage.getReplyToMessageId() + "] '" 
+					            + replyToText + "' by " + roomMessage.getUser() + ": [" 
+					            + roomMessage.getId() + "] " + roomMessage.getTxt());
+					 } else {
+						 System.out.println("[" + roomMessage.getId() + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt());
+					}
+				}
+
 
 			}
 			
@@ -188,6 +227,30 @@ public class ChatClient implements Runnable{
 	                        String roomName = parts[1].trim();
 	                        System.out.println("Debug: Sending /getAllMessages " + roomName);
 	                        client.sendTCP("/getAllMessages " + roomName); // Šaljemo serveru zahtev
+	                    }
+	                }
+	            	
+	                else if (userInput.startsWith("ROOM REPLY ")) {
+	                    String[] parts = userInput.split(" ", 5);
+	                    if (parts.length < 5) {
+	                        System.out.println("Usage: ROOM REPLY <roomName> <messageId> <message>");
+	                    } else {
+	                        String roomName = parts[2];
+	                        int replyToMessageId;
+	                        try {
+	                            replyToMessageId = Integer.parseInt(parts[3]);
+	                        } catch (NumberFormatException e) {
+	                            System.out.println("Invalid message ID format.");
+	                            continue;
+	                        }
+	                        String message = parts[4];
+	                        String replyToText = getMessageTextById(replyToMessageId); // nalazenje originalnog teksta poruke
+
+	                        //System.out.println(">>> Pokušaj odgovora na poruku ID: " + replyToMessageId + " (Tekst: " + replyToText + ")");
+
+	                        RoomMessage roomMessage = new RoomMessage(userName, roomName, message, replyToMessageId, replyToText);
+	                      
+	                        client.sendTCP(roomMessage);
 	                    }
 	                }
 
