@@ -35,7 +35,8 @@ public class ChatClient implements Runnable{
 	final int portNumber;
 	final String userName;
 	
-	private Map<Integer, RoomMessage> messageHistory = new HashMap<>();
+	private Map<String, Map<Integer, RoomMessage>> roomMessages = new HashMap<>();
+
 	
 	
 	public ChatClient(String hostName, int portNumber, String userName) {
@@ -49,15 +50,16 @@ public class ChatClient implements Runnable{
 	}
 
 
-
-	public String getMessageTextById(int messageId) {
-	    RoomMessage message = messageHistory.get(messageId);
-	    if (message != null) {
-	        return message.getTxt();
-	    }
-	    return "Unknown message";
+	public void addMessageToRoom(String roomName, RoomMessage message) {
+	    roomMessages.putIfAbsent(roomName, new HashMap<>());  // Kreira novu mapu ako ne postoji
+	    roomMessages.get(roomName).put(message.getId(), message);
 	}
 
+	public String getMessageTextById(String roomName, int messageId) {
+	    return roomMessages.getOrDefault(roomName, new HashMap<>())
+	                        .getOrDefault(messageId, new RoomMessage("Unknown", "", "Unknown message", 0, ""))
+	                        .getTxt();
+	}
 
 	
 	private void registerListener() {
@@ -110,25 +112,25 @@ public class ChatClient implements Runnable{
 				 if (object instanceof RoomMessage) {
 					 RoomMessage roomMessage = (RoomMessage) object;
 
-					 //System.out.println(">>> Klijent primio poruku ID=" + roomMessage.getId() + " Tekst='" + roomMessage.getTxt() + "'");
+					 // Osiguraj da postoji lista poruka za sobu
+					 roomMessages.putIfAbsent(roomMessage.getRoomName(), new HashMap<>());
 
-					    
-					 // addMessageToHistory(roomMessage);
-					 messageHistory.put(roomMessage.getId(), roomMessage);
-					    
-					    
-					 String replyToText = (roomMessage.getReplyToMessageId() != 0) ? 
-					        getMessageTextById(roomMessage.getReplyToMessageId()) : "";
+					 // mora novi ID kada je nova soba
+					 int newMessageId = roomMessages.get(roomMessage.getRoomName()).size() + 1;
 
-					 // Prikaz odgovora
+					 roomMessage.setId(newMessageId);
+
+					 roomMessages.get(roomMessage.getRoomName()).put(newMessageId, roomMessage);
+
 					 if (roomMessage.getReplyToMessageId() != 0) {
-						 System.out.println("Reply to [" + roomMessage.getReplyToMessageId() + "] '" 
-					            + replyToText + "' by " + roomMessage.getUser() + ": [" 
-					            + roomMessage.getId() + "] " + roomMessage.getTxt());
+						 System.out.println(roomMessage.getRoomName() + " Reply to [" + roomMessage.getReplyToMessageId() + "] '" 
+					            + getMessageTextById(roomMessage.getRoomName(), roomMessage.getReplyToMessageId()) + "' by " 
+					            + roomMessage.getUser() + ": [" + newMessageId + "] " + roomMessage.getTxt());
 					 } else {
-						 System.out.println("[" + roomMessage.getId() + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt());
-					}
-				}
+					        System.out.println(roomMessage.getRoomName() + " [" + newMessageId + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt());
+					 }
+				 }
+
 
 
 			}
@@ -244,7 +246,7 @@ public class ChatClient implements Runnable{
 	                            continue;
 	                        }
 	                        String message = parts[4];
-	                        String replyToText = getMessageTextById(replyToMessageId); // nalazenje originalnog teksta poruke
+	                        String replyToText = getMessageTextById(roomName, replyToMessageId); // nalazenje originalnog teksta poruke
 
 	                        //System.out.println(">>> Pokušaj odgovora na poruku ID: " + replyToMessageId + " (Tekst: " + replyToText + ")");
 
