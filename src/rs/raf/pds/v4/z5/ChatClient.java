@@ -37,8 +37,7 @@ public class ChatClient implements Runnable{
 	
 	private Map<String, Map<Integer, RoomMessage>> roomMessages = new HashMap<>();
 
-	
-	
+
 	public ChatClient(String hostName, int portNumber, String userName) {
 		this.client = new Client(DEFAULT_CLIENT_WRITE_BUFFER_SIZE, DEFAULT_CLIENT_READ_BUFFER_SIZE);
 		
@@ -62,6 +61,43 @@ public class ChatClient implements Runnable{
 	}
 
 	
+	// za front
+	
+	// Interfejs za prosleđivanje primljenih poruka GUI-ju
+	private MessageListener messageListener;
+
+	public interface MessageListener {
+	    void onMessageReceived(String message);
+	}
+
+	// Postavljanje listener-a
+	public void setOnMessageReceivedListener(MessageListener listener) {
+	    this.messageListener = listener;
+	}
+
+	// Slanje poruka sa validacijom konekcije
+	public void sendMessage(ChatMessage message) {
+	    if (client.isConnected()) {
+	        client.sendTCP(message);
+	        showChatMessage(message);
+	    } else {
+	        System.out.println("Niste povezani na server.");
+	    }
+	}
+
+	// Menjamo način prikaza primljenih poruka
+	private void showChatMessage(ChatMessage chatMessage) {
+	    String formattedMessage = chatMessage.getUser() + ": " + chatMessage.getTxt();
+	    
+	    if (messageListener != null) {
+	        messageListener.onMessageReceived(formattedMessage);
+	    }
+	    
+	    System.out.println(formattedMessage);
+	}
+
+	// za front
+	
 	private void registerListener() {
 		client.addListener(new Listener() {
 			public void connected (Connection connection) {
@@ -84,6 +120,10 @@ public class ChatClient implements Runnable{
 				
 				if (object instanceof InfoMessage) {
 					InfoMessage message = (InfoMessage)object;
+					 // Pozovi listener za GUI
+				    if (messageListener != null) {
+				        messageListener.onMessageReceived("Server:" + message.getTxt());
+				    }
 					showMessage("Server:"+message.getTxt());
 					return;
 				}
@@ -140,9 +180,12 @@ public class ChatClient implements Runnable{
 			}
 		});
 	}
-	private void showChatMessage(ChatMessage chatMessage) {
+	
+	// vrati ako ne radi
+/*	private void showChatMessage(ChatMessage chatMessage) {
 		System.out.println(chatMessage.getUser()+":"+chatMessage.getTxt());
-	}
+	}*/
+	// vrati iznad
 	private void showMessage(String txt) {
 		System.out.println(txt);
 	}
@@ -261,11 +304,14 @@ public class ChatClient implements Runnable{
 	            	
 	            	else if (userInput.contains(":")) {
 	            	    // Ovo je privatna poruka
-	            	    client.sendTCP(new ChatMessage(userName, userInput));
+	            		ChatMessage chatMessage = new ChatMessage(userName, userInput);
+	            	    client.sendTCP(chatMessage);
+	            	    showChatMessage(chatMessage); // da korisnik vidi i svoju poruku
 	            	} else {
 	            	    // Regularna poruka
 	            	    ChatMessage message = new ChatMessage(userName, userInput);
 	            	    client.sendTCP(message);
+	            	    showChatMessage(message); 
 	            	}
 	            	
 	            	if (!client.isConnected() && running)

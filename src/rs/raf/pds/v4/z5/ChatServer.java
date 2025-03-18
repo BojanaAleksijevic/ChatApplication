@@ -371,8 +371,12 @@ public class ChatServer implements Runnable {
 
 			public void disconnected(Connection connection) {
 				String user = connectionUserMap.get(connection);
-				connectionUserMap.remove(connection);
-				userConnectionMap.remove(user);
+				if (connection != null) {
+					connectionUserMap.remove(connection);
+				}
+				if (user != null) { 
+					userConnectionMap.remove(user);
+				}
 				showTextToAll(user + " has disconnected!", connection);
 			}
 		});
