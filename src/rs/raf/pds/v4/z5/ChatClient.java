@@ -76,14 +76,14 @@ public class ChatClient implements Runnable{
 	}
 
 	// Slanje poruka sa validacijom konekcije
-	public void sendMessage(ChatMessage message) {
+	public void sendObject(Object message) {
 	    if (client.isConnected()) {
 	        client.sendTCP(message);
-	        showChatMessage(message);
 	    } else {
 	        System.out.println("Niste povezani na server.");
 	    }
 	}
+
 
 	// Menjamo način prikaza primljenih poruka
 	private void showChatMessage(ChatMessage chatMessage) {

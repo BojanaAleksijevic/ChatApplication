@@ -1,4 +1,4 @@
-## Domaći zadatak iz Odabrana poglavlja iz projektovanja poslovnih aplikacija/Distribuirane mreze i sistemi
+## Domaći zadatak iz predmeta Odabrana poglavlja iz projektovanja poslovnih aplikacija/Distribuirane mreze i sistemi
 
 Zadatak: Chat aplikacija sa odredjenim funkcionalnostima
 
@@ -19,5 +19,6 @@ Funkcionalnosti aplikacije :
     * Korisnik moze da izvrsi reply na poruku komandom: ROOM REPLY imeSobe idPoruke poruka
         * idPoruke - id poruke na koju se odgovara. Ispred svake poslate poruke stoji njen id
 
-Napravljen je jednostavan desktop GUI korišćenjem Java Swing biblioteke:
-    * Implementiran je prozor za prikaz chat poruka sa funkcionalnošću unosa i slanja obicnih poruka (privatnih i grupnih)
+Napravljen je jednostavan desktop GUI korišćenjem Java Swing biblioteke. Implementirano je do sad:
+* Prozor za prikaz chat poruka za unosa i slanja obicnih poruka (privatnih i grupnih tj. multicast)
+* Dugme za kreiranje sobe
