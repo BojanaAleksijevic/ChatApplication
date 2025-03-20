@@ -128,6 +128,10 @@ public class ChatServer implements Runnable {
 				    rooms.put(createRoom.getRoomName(), room);
 				   // System.out.println("Debug: Room created: " + room.getRoomName());
 
+				    for (Connection conn : server.getConnections()) {
+				        conn.sendTCP(new InfoMessage("New room available: " + createRoom.getRoomName()));
+				    }
+
 				    // Dodavanje kreatora sobe kao člana sobe
 				    room.addUser(createRoom.getUserName(), connection); // Dodavanje korisnika direktno u objekat Room
 				    roomUsers.computeIfAbsent(createRoom.getRoomName(), k -> new HashSet<>()).add(createRoom.getUserName());
@@ -193,7 +197,19 @@ public class ChatServer implements Runnable {
 		
 				    connection.sendTCP(new InfoMessage("You have joined the room " + joinRoom.getRoomName() + ". WELCOME!"));
 			
+				} else if (object instanceof InfoMessage) {
+				    InfoMessage info = (InfoMessage) object;
+				    if (info.getTxt().equals("GET_ROOMS")) {
+				        if (rooms.isEmpty()) {
+				            connection.sendTCP(new InfoMessage("No rooms available at the moment."));
+				        } else {
+				            String roomList = String.join(", ", rooms.keySet());
+				            connection.sendTCP(new InfoMessage("Available rooms: " + roomList));
+				        }
+				    }
 				}
+
+
 
 				
 				if (object instanceof RoomMessage) {
