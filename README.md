@@ -23,3 +23,4 @@ Napravljen je jednostavan desktop GUI korišćenjem Java Swing biblioteke. Imple
 * Prozor za prikaz chat poruka za unosa i slanja obicnih poruka (privatnih i grupnih tj. multicast)
 * Dugme za kreiranje sobe
 * Dugme za prikljucivanje nekoj sobi, koje izbacuje opcije dostupnih soba
+* Dugme za poziv drugih korisnika u odredjenu sobu
