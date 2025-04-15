@@ -64,16 +64,28 @@ public class ChatClient implements Runnable{
 	// za front
 	
 	// Interfejs za prosleđivanje primljenih poruka GUI-ju
-	private MessageListener messageListener;
-
-	public interface MessageListener {
-	    void onMessageReceived(String message);
+	public interface RoomMessageListener {
+	    void onRoomMessageReceived(RoomMessage roomMessage);
 	}
+
+	public interface TextMessageListener {
+	    void onTextMessageReceived(String message);
+	}
+
 
 	// Postavljanje listener-a
-	public void setOnMessageReceivedListener(MessageListener listener) {
-	    this.messageListener = listener;
+	private RoomMessageListener roomMessageListener;
+	private TextMessageListener textMessageListener;
+
+	public void setOnRoomMessageReceivedListener(RoomMessageListener listener) {
+	    this.roomMessageListener = listener;
 	}
+
+	public void setOnTextMessageReceivedListener(TextMessageListener listener) {
+	    this.textMessageListener = listener;
+	}
+
+	
 
 	// Slanje poruka sa validacijom konekcije
 	public void sendObject(Object message) {
@@ -85,16 +97,51 @@ public class ChatClient implements Runnable{
 	}
 
 
-	// Menjamo način prikaza primljenih poruka
-	private void showChatMessage(ChatMessage chatMessage) {
-	    String formattedMessage = chatMessage.getUser() + ": " + chatMessage.getTxt();
-	    
-	    if (messageListener != null) {
-	        messageListener.onMessageReceived(formattedMessage);
+	private void showChatMessage(Object message) {
+	    String formattedMessage = "";
+	    String currentRoom = "Global Chat";
+
+	    if (message instanceof ChatMessage) {
+	        ChatMessage chatMessage = (ChatMessage) message;
+
+	        System.out.println("DEBUG: Client userName = " + userName + ", Message user = " + chatMessage.getUser());
+
+	        // IGNORIŠI ako je poruka od mene
+	        if (chatMessage.getUser().equals(userName)) {
+	            return;
+	        }
+
+	        formattedMessage = chatMessage.getUser() + ": " + chatMessage.getTxt();
+
+	        if (textMessageListener != null) {
+	            textMessageListener.onTextMessageReceived(formattedMessage);
+	        }
+
+	    } else if (message instanceof RoomMessage) {
+	        RoomMessage roomMessage = (RoomMessage) message;
+
+	        System.out.println("DEBUG: Client userName = " + userName + ", RoomMessage user = " + roomMessage.getUser());
+
+	        // IGNORIŠI ako je poruka od mene
+	        if (roomMessage.getUser().equals(userName)) {
+	            return;
+	        }
+
+	        formattedMessage = "[" + roomMessage.getRoomName() + "] " +
+	                           roomMessage.getUser() + ": " +
+	                           roomMessage.getTxt();
+	        currentRoom = roomMessage.getRoomName();
+
+	        if (roomMessageListener != null) {
+	            roomMessageListener.onRoomMessageReceived(roomMessage);
+	        }
 	    }
-	    
+
 	    System.out.println(formattedMessage);
 	}
+
+
+
 
 	// za front
 	
@@ -121,8 +168,8 @@ public class ChatClient implements Runnable{
 				if (object instanceof InfoMessage) {
 					InfoMessage message = (InfoMessage)object;
 					 // Pozovi listener za GUI
-				    if (messageListener != null) {
-				        messageListener.onMessageReceived("Server:" + message.getTxt());
+				    if (textMessageListener != null) {
+				    	textMessageListener.onTextMessageReceived("Server:" + message.getTxt());
 				    }
 					showMessage("Server:"+message.getTxt());
 					return;
@@ -169,8 +216,13 @@ public class ChatClient implements Runnable{
 					 } else {
 					        System.out.println(roomMessage.getRoomName() + " [" + newMessageId + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt());
 					 }
-				 }
+					 
 
+				// --- obavestenje za gui ---
+					 if (roomMessageListener != null) {
+				        roomMessageListener.onRoomMessageReceived(roomMessage);
+					 }
+				 }
 
 
 			}
@@ -185,7 +237,7 @@ public class ChatClient implements Runnable{
 /*	private void showChatMessage(ChatMessage chatMessage) {
 		System.out.println(chatMessage.getUser()+":"+chatMessage.getTxt());
 	}*/
-	// vrati iznad
+
 	private void showMessage(String txt) {
 		System.out.println(txt);
 	}
@@ -254,6 +306,7 @@ public class ChatClient implements Runnable{
 	                        client.sendTCP(new RoomMessage(userName, roomName, message));
 	                    }
 	                } 
+	            	
 	                else if (userInput.startsWith("INVITE USER ")) {
 	                    String[] parts = userInput.split(" ", 4);
 	                    if (parts.length < 4) {
@@ -350,4 +403,7 @@ public class ChatClient implements Runnable{
         	System.exit(-1);
         }
 	}
+
+
+
 }

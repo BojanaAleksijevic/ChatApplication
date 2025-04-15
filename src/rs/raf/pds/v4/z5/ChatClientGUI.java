@@ -2,9 +2,9 @@ package rs.raf.pds.v4.z5;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-import javax.swing.text.Style;
 import java.awt.*;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,7 +13,9 @@ import java.util.List;
 import rs.raf.pds.v4.z5.messages.ChatMessage;
 import rs.raf.pds.v4.z5.messages.CreateRoom;
 import rs.raf.pds.v4.z5.messages.InfoMessage;
+import rs.raf.pds.v4.z5.messages.InviteUser;
 import rs.raf.pds.v4.z5.messages.JoinRoom;
+import rs.raf.pds.v4.z5.messages.RoomMessage;
 
 public class ChatClientGUI {
     private ChatClient chatClient;
@@ -23,6 +25,8 @@ public class ChatClientGUI {
     private JButton sendButton;
     private String username;
     private JTextArea joinedRoomsArea;
+    private JComboBox<String> roomComboBox;
+
 
     private List<String> availableRooms = new ArrayList<>();
     private List<String> joinedRooms = new ArrayList<>();
@@ -37,7 +41,7 @@ public class ChatClientGUI {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLayout(new BorderLayout());
 
-        // Top panel koji sadrži dugmiće i spisak soba
+        // Gornji panel sa dugmićima i prikazom soba
         JPanel topPanel = new JPanel();
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
 
@@ -50,7 +54,7 @@ public class ChatClientGUI {
         buttonPanel.add(inviteUserButton);
 
         JPanel roomsPanel = new JPanel(new BorderLayout());
-        JLabel roomsLabel = new JLabel(" Rooms you are a member of:");
+        JLabel roomsLabel = new JLabel("Rooms you are a member of:");
         joinedRoomsArea = new JTextArea(3, 50);
         joinedRoomsArea.setEditable(false);
         joinedRoomsArea.setLineWrap(true);
@@ -62,28 +66,47 @@ public class ChatClientGUI {
         topPanel.add(buttonPanel);
         topPanel.add(roomsPanel);
         frame.add(topPanel, BorderLayout.NORTH);
+       
 
         // Chat prikaz
         chatPane = new JTextPane();
         chatPane.setEditable(false);
         frame.add(new JScrollPane(chatPane), BorderLayout.CENTER);
 
-        // Polje za unos poruka
+        // Donji panel za unos poruka
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
         sendButton = new JButton("Send");
+
+        roomComboBox = new JComboBox<>();
+        roomComboBox.addItem("Global Chat"); // inicijalno
+        JPanel bottomRightPanel = new JPanel(new BorderLayout());
+        bottomRightPanel.add(roomComboBox, BorderLayout.NORTH);
+        bottomRightPanel.add(sendButton, BorderLayout.SOUTH);
+
         inputPanel.add(inputField, BorderLayout.CENTER);
-        inputPanel.add(sendButton, BorderLayout.EAST);
+        inputPanel.add(bottomRightPanel, BorderLayout.EAST);
         frame.add(inputPanel, BorderLayout.SOUTH);
 
-        // Listener za dolazne poruke
-        chatClient.setOnMessageReceivedListener(this::displayMessage);
 
-        // Slanje poruka na dugme i enter
+     // Listener za dolazne poruke
+        chatClient.setOnRoomMessageReceivedListener((RoomMessage roomMessage) -> {
+            if (!roomMessage.getUser().equals(username)) {
+                displayMessage(roomMessage.getUser() + ": " + roomMessage.getTxt(), roomMessage.getRoomName());
+            }
+        });
+
+
+        chatClient.setOnTextMessageReceivedListener((String message) -> {
+            displayMessage(message, "Global Chat");
+        });
+
+        
+        // Slanje poruke na dugme i enter
         sendButton.addActionListener(e -> sendMessage());
         inputField.addActionListener(e -> sendMessage());
 
-        // Dugme za kreiranje sobe
+        // Kreiranje sobe
         createRoomButton.addActionListener(e -> {
             String roomName = JOptionPane.showInputDialog(frame, "Enter room name:");
             if (roomName != null && !roomName.trim().isEmpty()) {
@@ -91,23 +114,19 @@ public class ChatClientGUI {
             }
         });
 
-        // Dugme za join room
+        // Join room
         joinRoomButton.addActionListener(e -> {
             awaitingRoomList = true;
             chatClient.sendObject(new InfoMessage("GET_ROOMS"));
         });
 
-        frame.setVisible(true);
-        
-        
-        // dugme za invite user
+        // Invite user
         inviteUserButton.addActionListener(e -> {
             if (joinedRooms.isEmpty()) {
                 JOptionPane.showMessageDialog(frame, "You are not a member of any room.", "Info", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
-            // Prvo biramo sobu
             String room = (String) JOptionPane.showInputDialog(
                     frame,
                     "Select a room to invite user to:",
@@ -121,27 +140,56 @@ public class ChatClientGUI {
             if (room != null) {
                 String userToInvite = JOptionPane.showInputDialog(frame, "Enter username to invite:");
                 if (userToInvite != null && !userToInvite.trim().isEmpty()) {
-                    chatClient.sendObject(new rs.raf.pds.v4.z5.messages.InviteUser(room, userToInvite.trim()));
+                    chatClient.sendObject(new InviteUser(room, userToInvite.trim()));
                 }
             }
         });
 
+        frame.setVisible(true);
     }
 
     private void sendMessage() {
         String text = inputField.getText().trim();
         if (!text.isEmpty()) {
-            chatClient.sendObject(new ChatMessage(username, text));
-            displayMessage(username + ": " + text);
+            String selectedRoom = (String) roomComboBox.getSelectedItem();
+            if ("Global Chat".equals(selectedRoom)) {
+                ChatMessage message = new ChatMessage(username, text);
+                chatClient.sendObject(message);
+                displayMessage("Global Chat: " + username + ": " + text, "Global Chat");
+            } else {
+                RoomMessage roomMessage = new RoomMessage(username, selectedRoom, text);
+                chatClient.sendObject(roomMessage);
+                displayMessage(selectedRoom + ": " + username + ": " + text, selectedRoom);
+            }
             inputField.setText("");
         }
     }
 
-    private void displayMessage(String message) {
+
+
+
+
+
+    // Prikaz dolaznih poruka
+    private void displayMessage(String message, String currentRoom) {
         SwingUtilities.invokeLater(() -> {
+            String messageToDisplay;
+
             if (message.startsWith("Server:") && message.contains("is not available")) {
                 JOptionPane.showMessageDialog(frame, message.substring(7).trim(), "Error", JOptionPane.ERROR_MESSAGE);
-            } else if (message.startsWith("Server:Available rooms:")) {
+                return;
+            }
+
+            // Dodaj naziv sobe ispred poruke
+            if (message.startsWith("Server:") || message.startsWith("Global Chat:")
+                    || message.startsWith(currentRoom + ":") || message.startsWith(username + ":")
+                    || message.startsWith(username + " (")) {
+                messageToDisplay = message;
+            } else {
+                messageToDisplay = "[" + currentRoom + "] " + message;
+            }
+
+            if (message.startsWith("Server:Available rooms:")) {
                 availableRooms.clear();
                 String roomsPart = message.substring("Server:Available rooms:".length()).trim();
                 if (!roomsPart.isEmpty()) {
@@ -150,38 +198,33 @@ public class ChatClientGUI {
                         availableRooms.add(room.trim());
                     }
                 }
-                appendColoredText(message + "\n", Color.BLACK);
+                appendColoredText(messageToDisplay + "\n", Color.BLACK);
 
                 if (awaitingRoomList) {
                     awaitingRoomList = false;
                     showJoinRoomDialog();
                 }
-            } 
-            else if (message.startsWith("Server:No rooms available")) {
+            } else if (message.startsWith("Server:No rooms available")) {
                 availableRooms.clear();
-                appendColoredText(message + "\n", Color.BLACK);
+                appendColoredText(messageToDisplay + "\n", Color.BLACK);
                 if (awaitingRoomList) {
                     awaitingRoomList = false;
                     JOptionPane.showMessageDialog(frame, "No rooms available to join.", "Info", JOptionPane.INFORMATION_MESSAGE);
                 }
-            } 
-            else if (message.startsWith("New room available:")) {
+            } else if (message.startsWith("New room available:")) {
                 String newRoom = message.substring("New room available:".length()).trim();
                 if (!availableRooms.contains(newRoom)) {
                     availableRooms.add(newRoom);
                 }
                 appendColoredText("Server: New room available: " + newRoom + "\n", Color.BLACK);
-            } 
-            else if (message.startsWith("Server:You have joined the room ")) {
+            } else if (message.startsWith("Server:You have joined the room ")) {
                 String roomName = message.substring("Server:You have joined the room ".length()).split("\\.")[0].trim();
                 if (!joinedRooms.contains(roomName)) {
                     joinedRooms.add(roomName);
                     updateJoinedRoomsDisplay();
                 }
-                appendColoredText(message + "\n", Color.BLACK);
-            }
-
-            else if (message.startsWith("Server:You have been invited to room ")) {
+                appendColoredText(messageToDisplay + "\n", Color.BLACK);
+            } else if (message.startsWith("Server:You have been invited to room ")) {
                 String roomName = message.substring("Server:You have been invited to room ".length()).replace(".", "").trim();
                 int result = JOptionPane.showConfirmDialog(frame,
                         "You have been invited to join room: " + roomName + "\nDo you want to join?",
@@ -190,20 +233,20 @@ public class ChatClientGUI {
                 if (result == JOptionPane.YES_OPTION) {
                     chatClient.sendObject(new JoinRoom(roomName, username));
                 }
-            }
-            else if (message.startsWith("Server:Room ") && message.contains(" created, and you joined it.")) {
+            } else if (message.startsWith("Server:Room ") && message.contains(" created, and you joined it.")) {
                 String part = message.substring("Server:Room ".length());
                 String roomName = part.split(" created")[0].trim();
                 if (!joinedRooms.contains(roomName)) {
                     joinedRooms.add(roomName);
                     updateJoinedRoomsDisplay();
                 }
-                appendColoredText(message + "\n", Color.BLACK);
-            }
-
-            
-            else if (message.startsWith(username + ":")) {
-                appendColoredText(message + "\n", Color.BLUE);
+                appendColoredText(messageToDisplay + "\n", Color.BLACK);
+            } else if (message.startsWith(username + ":") || message.startsWith(username + " (")) {
+                appendColoredText(messageToDisplay + "\n", Color.BLUE);
+            } else if (message.startsWith("Global Chat:")) {
+                appendColoredText(messageToDisplay + "\n", Color.GREEN);
+            } else if (message.contains(currentRoom)) {
+                appendColoredText(messageToDisplay + "\n", Color.ORANGE);
             } else if (message.startsWith("Server:")) {
                 if (message.contains("is already a member") ||
                         message.contains("does not exist") ||
@@ -212,17 +255,16 @@ public class ChatClientGUI {
                         message.contains("Error:") ||
                         message.contains("is already connected") ||
                         message.contains("has connected")) {
-
-                        JOptionPane.showMessageDialog(frame, message.substring(7).trim(), "Info", JOptionPane.INFORMATION_MESSAGE);
-                    } else {
-                        appendColoredText(message + "\n", Color.BLACK);
-                    }
+                    JOptionPane.showMessageDialog(frame, message.substring(7).trim(), "Info", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    appendColoredText(messageToDisplay + "\n", Color.BLACK);
                 }
-            else {
-                appendColoredText(message + "\n", Color.RED);
+            } else {
+                appendColoredText(messageToDisplay + "\n", Color.RED);
             }
         });
     }
+
 
     private void showJoinRoomDialog() {
         if (availableRooms.isEmpty()) {
@@ -265,6 +307,15 @@ public class ChatClientGUI {
             e.printStackTrace();
         }
     }
+    
+    private void updateRoomComboBox() {
+        roomComboBox.removeAllItems();
+        roomComboBox.addItem("Global Chat");
+        for (String room : joinedRooms) {
+            roomComboBox.addItem(room);
+        }
+    }
+
 
     private void updateJoinedRoomsDisplay() {
         StringBuilder sb = new StringBuilder();
@@ -272,6 +323,7 @@ public class ChatClientGUI {
             sb.append(room).append("\n");
         }
         joinedRoomsArea.setText(sb.toString());
+        updateRoomComboBox();
     }
 
     public static void main(String[] args) {
@@ -287,4 +339,12 @@ public class ChatClientGUI {
             }
         }
     }
+    
+    public void onMessageReceived(RoomMessage roomMessage) {
+        SwingUtilities.invokeLater(() -> {
+            String formatted = "[" + roomMessage.getRoomName() + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt();
+            appendColoredText(formatted + "\n", Color.BLACK);
+        });
+    }
+
 }
