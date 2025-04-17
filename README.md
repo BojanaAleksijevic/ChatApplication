@@ -25,3 +25,4 @@ Napravljen je jednostavan desktop GUI korišćenjem Java Swing biblioteke. Imple
 * Dugme za prikljucivanje nekoj sobi, koje izbacuje opcije dostupnih soba
 * Dugme za poziv drugih korisnika u odredjenu sobu
 * Slanje poruka u sobi i prikaz poslednjih 10 poruka kada se neko naknadno prikljuci
+* Dugme za prikaz citave istorije poruka iz sobe

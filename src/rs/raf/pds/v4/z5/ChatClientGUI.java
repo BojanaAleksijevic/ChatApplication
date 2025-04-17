@@ -26,6 +26,9 @@ public class ChatClientGUI {
     private String username;
     private JTextArea joinedRoomsArea;
     private JComboBox<String> roomComboBox;
+    
+    private boolean loadingHistory = false;
+
 
 
     private List<String> availableRooms = new ArrayList<>();
@@ -77,12 +80,18 @@ public class ChatClientGUI {
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
         sendButton = new JButton("Send");
+        JButton loadHistoryButton = new JButton("Load History");
+
 
         roomComboBox = new JComboBox<>();
         roomComboBox.addItem("Global Chat"); // inicijalno
         JPanel bottomRightPanel = new JPanel(new BorderLayout());
         bottomRightPanel.add(roomComboBox, BorderLayout.NORTH);
-        bottomRightPanel.add(sendButton, BorderLayout.SOUTH);
+        JPanel buttonsPanel = new JPanel(new GridLayout(2, 1, 5, 5)); // 2 dugmeta, jedno ispod drugog
+        buttonsPanel.add(loadHistoryButton);
+        buttonsPanel.add(sendButton);
+
+        bottomRightPanel.add(buttonsPanel, BorderLayout.SOUTH);
 
         inputPanel.add(inputField, BorderLayout.CENTER);
         inputPanel.add(bottomRightPanel, BorderLayout.EAST);
@@ -98,7 +107,11 @@ public class ChatClientGUI {
 
 
         chatClient.setOnTextMessageReceivedListener((String message) -> {
-            displayMessage(message, "Global Chat");
+        	if (loadingHistory) {
+                displayMessage(message, "");
+            } else {
+                displayMessage(message, "Global Chat");
+            }
         });
 
         
@@ -144,6 +157,22 @@ public class ChatClientGUI {
                 }
             }
         });
+        
+        // prikaz svih poruka iz sobe
+        loadHistoryButton.addActionListener(e -> {
+            String selectedRoom = (String) roomComboBox.getSelectedItem();
+            if (!"Global Chat".equals(selectedRoom)) {
+                loadingHistory = true; // počinje učitavanje
+                chatClient.sendObject("/getAllMessages " + selectedRoom);
+
+              //  chatClient.sendObject(new InfoMessage("/getAllMessages " + selectedRoom));
+            } else {
+                JOptionPane.showMessageDialog(frame, "Global Chat nema čuvanu istoriju.");
+            }
+        });
+
+
+
 
         frame.setVisible(true);
     }
@@ -185,8 +214,10 @@ public class ChatClientGUI {
                     || message.startsWith(currentRoom + ":") || message.startsWith(username + ":")
                     || message.startsWith(username + " (")) {
                 messageToDisplay = message;
-            } else {
+            } else if (currentRoom != null && !currentRoom.isEmpty() && !"Global Chat".equals(currentRoom)) {
                 messageToDisplay = "[" + currentRoom + "] " + message;
+            } else {
+                messageToDisplay = message;
             }
 
             if (message.startsWith("Server:Available rooms:")) {
