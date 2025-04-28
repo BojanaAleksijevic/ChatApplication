@@ -18,6 +18,7 @@ import rs.raf.pds.v4.z5.messages.JoinRoom;
 import rs.raf.pds.v4.z5.messages.KryoUtil;
 import rs.raf.pds.v4.z5.messages.ListUsers;
 import rs.raf.pds.v4.z5.messages.Login;
+import rs.raf.pds.v4.z5.messages.ReplyMessage;
 import rs.raf.pds.v4.z5.messages.RoomMessage;
 import rs.raf.pds.v4.z5.messages.WhoRequest;
 
@@ -96,48 +97,30 @@ public class ChatClient implements Runnable{
 	    }
 	}
 
-
 	private void showChatMessage(Object message) {
-	    String formattedMessage = "";
-	    String currentRoom = "Global Chat";
+	    // RoomMessage i ReplyMessage se ne prikazuju ovde, već kroz roomMessageListener
+	    if (message instanceof RoomMessage || message instanceof ReplyMessage) {
+	        if (roomMessageListener != null) {
+	            roomMessageListener.onRoomMessageReceived((RoomMessage) message);
+	        }
+	        return;
+	    }
 
+	    // Ostalo (npr. obične poruke)
 	    if (message instanceof ChatMessage) {
 	        ChatMessage chatMessage = (ChatMessage) message;
-
-	        System.out.println("DEBUG: Client userName = " + userName + ", Message user = " + chatMessage.getUser());
 
 	        // IGNORIŠI ako je poruka od mene
 	        if (chatMessage.getUser().equals(userName)) {
 	            return;
 	        }
 
-	        formattedMessage = chatMessage.getUser() + ": " + chatMessage.getTxt();
+	        String formattedMessage = chatMessage.getUser() + ": " + chatMessage.getTxt();
 
 	        if (textMessageListener != null) {
 	            textMessageListener.onTextMessageReceived(formattedMessage);
 	        }
-
-	    } else if (message instanceof RoomMessage) {
-	        RoomMessage roomMessage = (RoomMessage) message;
-
-	        System.out.println("DEBUG: Client userName = " + userName + ", RoomMessage user = " + roomMessage.getUser());
-
-	        // IGNORIŠI ako je poruka od mene
-	        if (roomMessage.getUser().equals(userName)) {
-	            return;
-	        }
-
-	        formattedMessage = "[" + roomMessage.getRoomName() + "] " +
-	                           roomMessage.getUser() + ": " +
-	                           roomMessage.getTxt();
-	        currentRoom = roomMessage.getRoomName();
-
-	        if (roomMessageListener != null) {
-	            roomMessageListener.onRoomMessageReceived(roomMessage);
-	        }
 	    }
-
-	    System.out.println(formattedMessage);
 	}
 
 
@@ -303,7 +286,13 @@ public class ChatClient implements Runnable{
 	                    } else {
 	                        String roomName = parts[2];
 	                        String message = parts[3];
-	                        client.sendTCP(new RoomMessage(userName, roomName, message));
+	                        if (roomName.equalsIgnoreCase("Global Chat")) {
+	                            // Za globalnu poruku, koristi ChatMessage
+	                            client.sendTCP(new ChatMessage(userName, message));
+	                        } else {
+	                            // Za sobe, koristi RoomMessage
+	                            client.sendTCP(new RoomMessage(userName, roomName, message));
+	                        }
 	                    }
 	                } 
 	            	
@@ -344,11 +333,13 @@ public class ChatClient implements Runnable{
 	                        String message = parts[4];
 	                        String replyToText = getMessageTextById(roomName, replyToMessageId); // nalazenje originalnog teksta poruke
 
-	                        //System.out.println(">>> Pokušaj odgovora na poruku ID: " + replyToMessageId + " (Tekst: " + replyToText + ")");
+	                        System.out.println(">>> Pokušaj odgovora na poruku ID: " + replyToMessageId + " (Tekst: " + replyToText + ")");
 
 	                        RoomMessage roomMessage = new RoomMessage(userName, roomName, message, replyToMessageId, replyToText);
-	                      
+	                  //      ReplyMessage replyMessage = new ReplyMessage(userName, roomName, message, replyToMessageId, replyToText);
+	                 //       client.sendTCP(replyMessage);
 	                        client.sendTCP(roomMessage);
+
 	                    }
 	                }
 

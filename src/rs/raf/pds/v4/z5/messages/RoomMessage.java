@@ -95,5 +95,11 @@ public class RoomMessage implements Message{
     public boolean isRoomMessage() {
         return isRoomMessage;
     }
+    
+    @Override
+    public String toString() {
+        return getUser() + ": " + getTxt();
+    }
+
 	
 }

@@ -2,22 +2,28 @@ package rs.raf.pds.v4.z5;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import rs.raf.pds.v4.z5.ChatClient.RoomMessageListener;
 import rs.raf.pds.v4.z5.messages.ChatMessage;
 import rs.raf.pds.v4.z5.messages.CreateRoom;
 import rs.raf.pds.v4.z5.messages.InfoMessage;
 import rs.raf.pds.v4.z5.messages.InviteUser;
 import rs.raf.pds.v4.z5.messages.JoinRoom;
+import rs.raf.pds.v4.z5.messages.MessageOffset;
+import rs.raf.pds.v4.z5.messages.ReplyMessage;
 import rs.raf.pds.v4.z5.messages.RoomMessage;
 
-public class ChatClientGUI {
+public class ChatClientGUI implements RoomMessageListener {
     private ChatClient chatClient;
     private JFrame frame;
     private JTextPane chatPane;
@@ -30,10 +36,20 @@ public class ChatClientGUI {
     private boolean loadingHistory = false;
 
 
-
     private List<String> availableRooms = new ArrayList<>();
     private List<String> joinedRooms = new ArrayList<>();
     private boolean awaitingRoomList = false;
+    
+    
+    private List<MessageOffset> messageOffsets = new ArrayList<>();
+    private StyledDocument doc;
+    private RoomMessage lastAppendedMessage = null;
+
+    private int replyMessageId = -1;
+    private String replyText = null;
+    private JLabel replyToLabel;
+    private JButton cancelReplyButton;
+
 
     public ChatClientGUI(ChatClient chatClient) {
         this.chatClient = chatClient;
@@ -65,6 +81,11 @@ public class ChatClientGUI {
         JScrollPane roomsScroll = new JScrollPane(joinedRoomsArea);
         roomsPanel.add(roomsLabel, BorderLayout.NORTH);
         roomsPanel.add(roomsScroll, BorderLayout.CENTER);
+        
+        
+        
+  
+        
 
         topPanel.add(buttonPanel);
         topPanel.add(roomsPanel);
@@ -76,32 +97,116 @@ public class ChatClientGUI {
         chatPane.setEditable(false);
         frame.add(new JScrollPane(chatPane), BorderLayout.CENTER);
 
-        // Donji panel za unos poruka
+        
+        doc = chatPane.getStyledDocument();
+
+        chatPane.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+            	System.out.println("Kliknuto na listu!"); 
+                int pos = chatPane.viewToModel2D(e.getPoint());
+                System.out.println("Kliknuto na poziciji u tekstu: " + pos);
+                System.out.println("Ukupno offseta: " + messageOffsets.size());
+
+                for (MessageOffset mo : messageOffsets) {
+                    System.out.println("Provera [" + mo.getStartOffset() + ", " + mo.getEndOffset() + "]");
+                    System.out.println("[" + mo.getStartOffset() + ", " + mo.getEndOffset() + "]: " + mo.getMessage().getTxt());
+                    if (pos >= mo.getStartOffset() && pos <= mo.getEndOffset()) {
+                        RoomMessage clickedMessage = mo.getMessage();
+                        replyText = clickedMessage.getTxt();
+                        replyMessageId = clickedMessage.getId();
+
+                        // Skrati prikaz teksta (npr. prvih 50 karaktera)
+                        String prikazaniTekst = replyText.length() > 50 ? replyText.substring(0, 50) + "..." : replyText;
+                        System.out.println("Kliknuta poruka: " + clickedMessage.getTxt());
+
+                        replyToLabel.setText("Odgovaraš na: " + prikazaniTekst);
+                        replyToLabel.setVisible(true);
+                        cancelReplyButton.setVisible(true);
+                        break;
+                    }
+                }
+            }
+        });
+
+
+        
+        
+        // Donji panel - reply i input
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BorderLayout());
+
+        
+     // Panel za labelu za odgovor i X dugme
+        JPanel replyPanel = new JPanel(new BorderLayout());
+        replyPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5)); // margine oko panela
+
+        replyToLabel = new JLabel(" ");
+        replyToLabel.setForeground(Color.GRAY);
+        replyToLabel.setVisible(false);
+        replyPanel.add(replyToLabel, BorderLayout.CENTER); // labela levo
+
+        cancelReplyButton = new JButton("X");
+        cancelReplyButton.setBackground(Color.RED);
+        cancelReplyButton.setForeground(Color.WHITE);
+        cancelReplyButton.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10)); // padding u dugmetu
+        cancelReplyButton.setFocusable(false);
+        cancelReplyButton.setVisible(false);
+
+        cancelReplyButton.addActionListener(e -> {
+        	resetReply();
+        });
+
+        replyPanel.add(cancelReplyButton, BorderLayout.EAST); // dugme skroz desno
+        bottomPanel.add(replyPanel, BorderLayout.NORTH);
+
+
+        
+        // input panel za unos poruka
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField = new JTextField();
         sendButton = new JButton("Send");
         JButton loadHistoryButton = new JButton("Load History");
 
-
         roomComboBox = new JComboBox<>();
         roomComboBox.addItem("Global Chat"); // inicijalno
+        
         JPanel bottomRightPanel = new JPanel(new BorderLayout());
         bottomRightPanel.add(roomComboBox, BorderLayout.NORTH);
         JPanel buttonsPanel = new JPanel(new GridLayout(2, 1, 5, 5)); // 2 dugmeta, jedno ispod drugog
         buttonsPanel.add(loadHistoryButton);
         buttonsPanel.add(sendButton);
+      
 
         bottomRightPanel.add(buttonsPanel, BorderLayout.SOUTH);
 
         inputPanel.add(inputField, BorderLayout.CENTER);
         inputPanel.add(bottomRightPanel, BorderLayout.EAST);
-        frame.add(inputPanel, BorderLayout.SOUTH);
 
+        // inputPanel ispod reply labele
+        bottomPanel.add(inputPanel, BorderLayout.CENTER);
+
+        // ceo donji deo u frame
+        frame.add(bottomPanel, BorderLayout.SOUTH);
 
      // Listener za dolazne poruke
+        //chatClient.setOnRoomMessageReceivedListener(this);
+
         chatClient.setOnRoomMessageReceivedListener((RoomMessage roomMessage) -> {
             if (!roomMessage.getUser().equals(username)) {
-                displayMessage(roomMessage.getUser() + ": " + roomMessage.getTxt(), roomMessage.getRoomName());
+                if (roomMessage instanceof ReplyMessage) {
+                    ReplyMessage replyMsg = (ReplyMessage) roomMessage;
+
+                    String prikazaniTekst = replyMsg.getReplyToText();
+                    if (prikazaniTekst.length() > 30) {
+                        prikazaniTekst = prikazaniTekst.substring(0, 30) + "...";
+                    }
+
+                    displayMessage(roomMessage.getUser() + " (reply to: " + prikazaniTekst + "): " + roomMessage.getTxt(), roomMessage.getRoomName());
+                } else {
+                    displayMessage(roomMessage.getUser() + ": " + roomMessage.getTxt(), roomMessage.getRoomName());
+                }
+
+                addMessage(roomMessage);
             }
         });
 
@@ -115,9 +220,15 @@ public class ChatClientGUI {
         });
 
         
+        
+        
         // Slanje poruke na dugme i enter
+     // Slanje poruke na klik dugmeta
         sendButton.addActionListener(e -> sendMessage());
+
+        // Slanje poruke pritiskom na Enter
         inputField.addActionListener(e -> sendMessage());
+
 
         // Kreiranje sobe
         createRoomButton.addActionListener(e -> {
@@ -181,15 +292,24 @@ public class ChatClientGUI {
         String text = inputField.getText().trim();
         if (!text.isEmpty()) {
             String selectedRoom = (String) roomComboBox.getSelectedItem();
+
             if ("Global Chat".equals(selectedRoom)) {
                 ChatMessage message = new ChatMessage(username, text);
                 chatClient.sendObject(message);
-                displayMessage("Global Chat: " + username + ": " + text, "Global Chat");
+                appendColoredText("Global Chat: " + username + ": " + text + "\n", Color.GRAY); // ili bilo koja boja
             } else {
-                RoomMessage roomMessage = new RoomMessage(username, selectedRoom, text);
-                chatClient.sendObject(roomMessage);
-                displayMessage(selectedRoom + ": " + username + ": " + text, selectedRoom);
+                RoomMessage msg;
+                if (replyText != null && replyMessageId != -1) {
+                    msg = new RoomMessage(username, selectedRoom, text, replyMessageId, replyText);
+                   // appendColoredText("[" + selectedRoom + "] " + username + " ↪ \"" + replyText + "\": " + text + "\n", Color.BLUE);
+                } else {
+                    msg = new RoomMessage(username, selectedRoom, text);
+                   // appendColoredText("[" + selectedRoom + "] " + username + ": " + text + "\n", Color.BLUE);
+                }
+                chatClient.sendObject(msg);
             }
+
+            resetReply();
             inputField.setText("");
         }
     }
@@ -198,11 +318,33 @@ public class ChatClientGUI {
 
 
 
+    // Prikaz room poruka
+  /*  private void displayMessage(RoomMessage roomMessage) {
+        SwingUtilities.invokeLater(() -> {
+            StringBuilder sb = new StringBuilder();
+            sb.append("[").append(roomMessage.getId()).append("] ");
+            sb.append(roomMessage.getUser()).append(": ");
+
+            if (roomMessage instanceof ReplyMessage) {
+                ReplyMessage reply = (ReplyMessage) roomMessage;
+                sb.append("\n  ↪ Reply to [").append(reply.getReplyToMessageId()).append("]: ");
+                sb.append(reply.getReplyToText()).append("\n");
+            }
+
+            sb.append(roomMessage.getTxt()).append("\n");
+
+            lastAppendedMessage = roomMessage;
+            appendColoredText(sb.toString(), Color.BLACK);
+        });
+    }*/
+
+
+
 
     // Prikaz dolaznih poruka
     private void displayMessage(String message, String currentRoom) {
         SwingUtilities.invokeLater(() -> {
-            String messageToDisplay;
+            String messageToDisplay = "";
 
             if (message.startsWith("Server:") && message.contains("is not available")) {
                 JOptionPane.showMessageDialog(frame, message.substring(7).trim(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -235,6 +377,12 @@ public class ChatClientGUI {
                     awaitingRoomList = false;
                     showJoinRoomDialog();
                 }
+            } else if (message.startsWith(username + " (reply to:")) {
+                String[] parts = message.split(":");
+                String replyInfo = parts[0].replace(" (reply to: ", "");
+                String replyMessage = parts[1].trim();
+
+                messageToDisplay = username + " (reply to: " + replyInfo + "): " + replyMessage;
             } else if (message.startsWith("Server:No rooms available")) {
                 availableRooms.clear();
                 appendColoredText(messageToDisplay + "\n", Color.BLACK);
@@ -295,6 +443,39 @@ public class ChatClientGUI {
             }
         });
     }
+    
+    private void resetReply() {
+        replyText = null;
+        replyMessageId = -1;
+        replyToLabel.setText(" ");
+        replyToLabel.setVisible(false);
+        cancelReplyButton.setVisible(false);
+    }
+
+    
+    private void addMessage(RoomMessage message) {
+        try {
+            StyledDocument doc = chatPane.getStyledDocument();
+            int startOffset = doc.getLength();
+
+            StringBuilder sb = new StringBuilder();
+            if (message.getReplyToText() != null && !message.getReplyToText().isEmpty()) {
+                sb.append("(reply to: ").append(message.getReplyToText()).append(")\n");
+            }
+
+            sb.append(message.getUser()).append(": ").append(message.getTxt()).append("\n\n");
+
+            doc.insertString(doc.getLength(), sb.toString(), null);
+
+            int endOffset = doc.getLength();
+
+            messageOffsets.add(new MessageOffset(startOffset, endOffset, message));
+
+        } catch (BadLocationException e) {
+            e.printStackTrace();
+        }
+    }
+
 
 
     private void showJoinRoomDialog() {
@@ -329,15 +510,28 @@ public class ChatClientGUI {
     }
 
     private void appendColoredText(String text, Color color) {
-        StyledDocument doc = chatPane.getStyledDocument();
-        Style style = chatPane.addStyle("ColorStyle", null);
-        StyleConstants.setForeground(style, color);
         try {
+            Style style = doc.addStyle("Style", null);
+            StyleConstants.setForeground(style, color);
+
+            int startOffset = doc.getLength(); // pre dodavanja
             doc.insertString(doc.getLength(), text, style);
+            int endOffset = doc.getLength(); // posle dodavanja
+
+            // Ako imamo lastAppendedMessage (npr. poslat ili primljen RoomMessage), sačuvaj njegov offset
+            if (lastAppendedMessage != null) {
+                messageOffsets.add(new MessageOffset(startOffset, endOffset, lastAppendedMessage));
+                lastAppendedMessage = null; // resetuj ga da se ne koristi za sledeću poruku
+            }
+
         } catch (BadLocationException e) {
             e.printStackTrace();
         }
     }
+
+
+
+
     
     private void updateRoomComboBox() {
         roomComboBox.removeAllItems();
@@ -356,13 +550,63 @@ public class ChatClientGUI {
         joinedRoomsArea.setText(sb.toString());
         updateRoomComboBox();
     }
+    
+    @Override
+    public void onRoomMessageReceived(RoomMessage roomMessage) {
+        System.out.println("GUI: Poruka primljena: " + roomMessage.getTxt());
+        try {
+            String roomPart = "[" + roomMessage.getRoomName() + "] ";
+            String userPart = roomMessage.getUser();
+            String separator, replyText = "", messageText;
+            Color color;
+
+            if (roomMessage.getReplyToMessageId() != 0) {
+                separator = " ↪ \"" + roomMessage.getReplyToText() + "\": ";
+                messageText = roomMessage.getTxt() + "\n";
+                color = new Color(0, 102, 204); // svetloplava za reply
+            } else {
+                separator = ": ";
+                messageText = roomMessage.getTxt() + "\n";
+                color = new Color(0, 153, 0); // zelena za obične poruke u sobi
+            }
+
+            // Stil za običan tekst
+            SimpleAttributeSet regularAttr = new SimpleAttributeSet();
+            StyleConstants.setForeground(regularAttr, color);
+
+            // Stil za korisničko ime (bold + u istoj boji)
+            SimpleAttributeSet boldAttr = new SimpleAttributeSet();
+            StyleConstants.setForeground(boldAttr, color);
+            StyleConstants.setBold(boldAttr, true);
+
+            int startOffset = doc.getLength();
+
+            doc.insertString(doc.getLength(), roomPart, regularAttr);
+            doc.insertString(doc.getLength(), userPart, boldAttr);
+            doc.insertString(doc.getLength(), separator, regularAttr);
+            doc.insertString(doc.getLength(), messageText, regularAttr);
+
+            int endOffset = doc.getLength();
+
+            messageOffsets.add(new MessageOffset(startOffset, endOffset, roomMessage));
+        } catch (BadLocationException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+
+    
+
 
     public static void main(String[] args) {
         String username = JOptionPane.showInputDialog("Enter your username:");
         if (username != null && !username.trim().isEmpty()) {
             try {
                 ChatClient chatClient = new ChatClient("localhost", 4555, username.trim());
-                new ChatClientGUI(chatClient);
+                ChatClientGUI gui = new ChatClientGUI(chatClient);
+
+                chatClient.setOnRoomMessageReceivedListener(gui);
                 chatClient.start();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -370,12 +614,6 @@ public class ChatClientGUI {
             }
         }
     }
-    
-    public void onMessageReceived(RoomMessage roomMessage) {
-        SwingUtilities.invokeLater(() -> {
-            String formatted = "[" + roomMessage.getRoomName() + "] " + roomMessage.getUser() + ": " + roomMessage.getTxt();
-            appendColoredText(formatted + "\n", Color.BLACK);
-        });
-    }
+
 
 }
