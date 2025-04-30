@@ -33,6 +33,7 @@ public class ChatClientGUI implements RoomMessageListener {
     private JTextArea joinedRoomsArea;
     private JComboBox<String> roomComboBox;
     
+    
     private boolean loadingHistory = false;
 
 
@@ -49,6 +50,8 @@ public class ChatClientGUI implements RoomMessageListener {
     private String replyText = null;
     private JLabel replyToLabel;
     private JButton cancelReplyButton;
+
+    private JLabel statusLabel;
 
 
     public ChatClientGUI(ChatClient chatClient) {
@@ -83,7 +86,12 @@ public class ChatClientGUI implements RoomMessageListener {
         roomsPanel.add(roomsScroll, BorderLayout.CENTER);
         
         
-        
+        statusLabel = new JLabel(" ");
+        statusLabel.setForeground(Color.RED); // ili neka druga boja
+        statusLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+
+        roomsPanel.add(statusLabel, BorderLayout.SOUTH); 
+
   
         
 
@@ -102,6 +110,7 @@ public class ChatClientGUI implements RoomMessageListener {
 
         chatPane.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
+            	String selectedRoom = (String) roomComboBox.getSelectedItem(); 
             	System.out.println("Kliknuto na listu!"); 
                 int pos = chatPane.viewToModel2D(e.getPoint());
                 System.out.println("Kliknuto na poziciji u tekstu: " + pos);
@@ -112,14 +121,23 @@ public class ChatClientGUI implements RoomMessageListener {
                     System.out.println("[" + mo.getStartOffset() + ", " + mo.getEndOffset() + "]: " + mo.getMessage().getTxt());
                     if (pos >= mo.getStartOffset() && pos <= mo.getEndOffset()) {
                         RoomMessage clickedMessage = mo.getMessage();
+                        if (!clickedMessage.getRoomName().equals(selectedRoom)) {
+                            // Kliknuta poruka NIJE iz trenutno izabrane sobe — ignorisi
+                            System.out.println("Poruka nije iz trenutne sobe, reply onemogućen.");
+                            JOptionPane.showMessageDialog(chatPane,
+                            	    "Ne možete odgovoriti na poruku iz druge sobe.",
+                            	    "Greška pri odgovoru",
+                            	    JOptionPane.WARNING_MESSAGE);
+                            return;
+                        }
                         replyText = clickedMessage.getTxt();
                         replyMessageId = clickedMessage.getId();
 
-                        // Skrati prikaz teksta (npr. prvih 50 karaktera)
-                        String prikazaniTekst = replyText.length() > 50 ? replyText.substring(0, 50) + "..." : replyText;
+                        // Skrati prikaz teksta (prvih 30 karaktera)
+                        String prikazaniTekst = replyText.length() > 30 ? replyText.substring(0, 30) + "..." : replyText;
                         System.out.println("Kliknuta poruka: " + clickedMessage.getTxt());
 
-                        replyToLabel.setText("Odgovaraš na: " + prikazaniTekst);
+                        replyToLabel.setText("<html>Replying to:<br>" + prikazaniTekst + "</html>");
                         replyToLabel.setVisible(true);
                         cancelReplyButton.setVisible(true);
                         break;
@@ -296,7 +314,8 @@ public class ChatClientGUI implements RoomMessageListener {
             if ("Global Chat".equals(selectedRoom)) {
                 ChatMessage message = new ChatMessage(username, text);
                 chatClient.sendObject(message);
-                appendColoredText("Global Chat: " + username + ": " + text + "\n", Color.GRAY); // ili bilo koja boja
+                appendColoredText(username + ": " + text + "\n", Color.GREEN);
+
             } else {
                 RoomMessage msg;
                 if (replyText != null && replyMessageId != -1) {
@@ -313,31 +332,6 @@ public class ChatClientGUI implements RoomMessageListener {
             inputField.setText("");
         }
     }
-
-
-
-
-
-    // Prikaz room poruka
-  /*  private void displayMessage(RoomMessage roomMessage) {
-        SwingUtilities.invokeLater(() -> {
-            StringBuilder sb = new StringBuilder();
-            sb.append("[").append(roomMessage.getId()).append("] ");
-            sb.append(roomMessage.getUser()).append(": ");
-
-            if (roomMessage instanceof ReplyMessage) {
-                ReplyMessage reply = (ReplyMessage) roomMessage;
-                sb.append("\n  ↪ Reply to [").append(reply.getReplyToMessageId()).append("]: ");
-                sb.append(reply.getReplyToText()).append("\n");
-            }
-
-            sb.append(roomMessage.getTxt()).append("\n");
-
-            lastAppendedMessage = roomMessage;
-            appendColoredText(sb.toString(), Color.BLACK);
-        });
-    }*/
-
 
 
 
@@ -433,7 +427,8 @@ public class ChatClientGUI implements RoomMessageListener {
                         message.contains("You must be a member") ||
                         message.contains("Error:") ||
                         message.contains("is already connected") ||
-                        message.contains("has connected")) {
+                        message.contains("has connected") ||
+                		message.contains("has joined the room")) {
                     JOptionPane.showMessageDialog(frame, message.substring(7).trim(), "Info", JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     appendColoredText(messageToDisplay + "\n", Color.BLACK);
@@ -555,6 +550,13 @@ public class ChatClientGUI implements RoomMessageListener {
     public void onRoomMessageReceived(RoomMessage roomMessage) {
         System.out.println("GUI: Poruka primljena: " + roomMessage.getTxt());
         try {
+        	
+        	if ("Server".equals(roomMessage.getUser())) {
+        	    doc.insertString(doc.getLength(), roomMessage.getTxt() + "\n", null);
+        	    return;
+        	}
+
+        	
             String roomPart = "[" + roomMessage.getRoomName() + "] ";
             String userPart = roomMessage.getUser();
             String separator, replyText = "", messageText;
